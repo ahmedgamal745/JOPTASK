@@ -1,0 +1,19 @@
+ <app-header (companySearch)="jobStore.updateFilters({ company: $event })" />
+    <div class="container mx-auto px-4 py-8">
+      <div class="flex flex-col md:flex-row gap-8">
+        <div class="w-full md:w-1/4">
+          <app-filters (filterChange)="jobStore.updateFilters($event)" />
+        </div>
+        <div class="w-full md:w-3/4">
+          <app-job-listings 
+            [jobs]="jobStore.jobs()" 
+            [filteredJobs]="jobStore.filteredJobs()"
+            [isLoading]="jobStore.isLoading()"
+            [currentPage]="jobStore.pagination().currentPage"
+            [itemsPerPage]="jobStore.pagination().itemsPerPage"
+            [totalItems]="jobStore.pagination().totalItems"
+            (pageChange)="jobStore.setPage($event)"
+          />
+        </div>
+      </div>
+    </div>
