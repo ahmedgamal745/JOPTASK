@@ -25,6 +25,8 @@ type JobState = {
   isLoading: boolean;
   filters: FilterCriteria;
   pagination: PaginationState;
+  selectedJob: Job | null;
+  isModalOpen: boolean;
 };
 
 const initialState: JobState = {
@@ -42,75 +44,134 @@ const initialState: JobState = {
     itemsPerPage: 4,
     totalItems: 0,
   },
+  selectedJob: null,
+  isModalOpen: false
 };
 
 export const JobStore = signalStore(
   { providedIn: 'root' },
   withState(initialState),
   withComputed(({ filteredJobs, pagination }) => ({
-    // Computed signals for pagination
     totalPages: computed(() => Math.ceil(filteredJobs().length / pagination().itemsPerPage)),
     paginatedJobs: computed(() => {
       const start = (pagination().currentPage - 1) * pagination().itemsPerPage;
       return filteredJobs().slice(start, start + pagination().itemsPerPage);
     }),
+    showingStart: computed(() => (pagination().currentPage - 1) * pagination().itemsPerPage + 1),
+    showingEnd: computed(() => Math.min(
+      pagination().currentPage * pagination().itemsPerPage, 
+      filteredJobs().length
+    ))
   })),
-  withMethods((store, jobService = inject(JobService), descService = inject(JobDescriptionService)) => ({
-    // Fetch jobs
-    loadJobs: rxMethod<void>(
-      pipe(
-        tap(() => patchState(store, { isLoading: true })),
-        switchMap(() => jobService.getJobs().pipe(
-          tap((res) => {
-            const jobs = res.data.map((job: { description: any; title: string; }) => ({
-              ...job,
-              description: job.description || descService.getDefaultDescription(job.title),
-            }));
-            patchState(store, { jobs, filteredJobs: jobs, isLoading: false, pagination: { ...store.pagination(), totalItems: jobs.length } });
-          }),
-          catchError(() => {
-            patchState(store, { isLoading: false });
-            return of([]);
-          }),
-        )),
+  withMethods((store, jobService = inject(JobService), descService = inject(JobDescriptionService)) => {
+    const methods = {
+      loadJobs: rxMethod<void>(
+        pipe(
+          tap(() => patchState(store, { isLoading: true })),
+          switchMap(() => jobService.getJobs().pipe(
+            tap((res) => {
+              const jobs = res.data.map((job: { description: any; title: string; }) => ({
+                ...job,
+                description: job.description || descService.getDefaultDescription(job.title),
+              }));
+              patchState(store, { 
+                jobs, 
+                filteredJobs: jobs, 
+                isLoading: false, 
+                pagination: { 
+                  ...store.pagination(), 
+                  totalItems: jobs.length 
+                } 
+              });
+            }),
+            catchError(() => {
+              patchState(store, { isLoading: false });
+              return of([]);
+            }),
+          ))
+        )
       ),
-    ),
 
-    // Update filters
-    updateFilters: (updates: Partial<FilterCriteria>) => {
-      const newFilters = { ...store.filters(), ...updates };
-      patchState(store, { filters: newFilters });
+      updateFilters: (updates: Partial<FilterCriteria>) => {
+        const newFilters = { ...store.filters(), ...updates };
+        patchState(store, { filters: newFilters });
 
-      // Filter jobs
-      const filtered = store.jobs().filter(job => {
-        const matchesTitle = newFilters.title ? job.title.toLowerCase().includes(newFilters.title.toLowerCase()) : true;
-        const matchesLocation = newFilters.location ? job.page.location.country_and_city?.toLowerCase().includes(newFilters.location.toLowerCase()) : true;
-        const matchesExperience = newFilters.experienceLevel 
-          ? getExperienceLevel(job.minimum_years_of_experience) === newFilters.experienceLevel 
-          : true;
-        const matchesCompany = newFilters.company 
-          ? job.page.alias.split(' ')[0].toLowerCase().includes(newFilters.company.toLowerCase()) 
-          : true;
+        const filtered = store.jobs().filter(job => {
+          const matchesTitle = newFilters.title ? 
+            job.title.toLowerCase().includes(newFilters.title.toLowerCase()) : true;
+          const matchesLocation = newFilters.location ? 
+            job.page.location.country_and_city?.toLowerCase().includes(newFilters.location.toLowerCase()) : true;
+          const matchesExperience = newFilters.experienceLevel ? 
+            getExperienceLevel(job.minimum_years_of_experience) === newFilters.experienceLevel : true;
+          const matchesCompany = newFilters.company ? 
+            job.page.alias.split(' ')[0].toLowerCase().includes(newFilters.company.toLowerCase()) : true;
 
-        return matchesTitle && matchesLocation && matchesExperience && matchesCompany;
-      });
+          return matchesTitle && matchesLocation && matchesExperience && matchesCompany;
+        });
 
-      patchState(store, { 
-        filteredJobs: filtered,
-        pagination: { ...store.pagination(), currentPage: 1, totalItems: filtered.length },
-      });
-    },
+        patchState(store, { 
+          filteredJobs: filtered,
+          pagination: { 
+            ...store.pagination(), 
+            currentPage: 1, 
+            totalItems: filtered.length 
+          },
+        });
+      },
 
-    // Pagination controls
-    setPage: (page: number) => {
-      patchState(store, { 
-        pagination: { ...store.pagination(), currentPage: page },
-      });
-    },
-  })),
+      setPage: (page: number) => {
+        patchState(store, { 
+          pagination: { 
+            ...store.pagination(), 
+            currentPage: page 
+          } 
+        });
+      },
+
+      openJobModal: (job: Job) => {
+        patchState(store, {
+          selectedJob: job,
+          isModalOpen: true
+        });
+      },
+
+      closeJobModal: () => {
+        patchState(store, {
+          selectedJob: null,
+          isModalOpen: false
+        });
+      },
+
+      applyToJob: () => {
+        const job = store.selectedJob();
+        if (job) {
+          // Implement actual application logic here
+          console.log('Applying to job:', job.id);
+          methods.closeJobModal();
+        }
+      },
+
+      saveJob: () => {
+        const job = store.selectedJob();
+        if (job) {
+          // Implement actual save logic here
+          console.log('Saving job:', job.id);
+          methods.closeJobModal();
+        }
+      },
+
+      getExperienceLevelDisplayText: (years: number): string => {
+        if (years === 0) return 'Entry Level';
+        if (years === 1) return 'Mid Level';
+        if (years === 2 || years === 3) return 'Senior Level';
+        return 'Executive';
+      }
+    };
+
+    return methods;
+  })
 );
 
-// Helper (move to a shared file if reused)
 function getExperienceLevel(years: number): string {
   if (years === 0) return 'entry';
   if (years === 1) return 'mid';
