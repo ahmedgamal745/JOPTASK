@@ -1,10 +1,11 @@
 import { signalStore, withState, withMethods, patchState, withComputed } from '@ngrx/signals';
 import { computed, inject } from '@angular/core';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
-import { pipe, switchMap, tap, catchError, of } from 'rxjs';
+import { pipe, switchMap, tap, catchError, of, debounceTime, distinctUntilChanged } from 'rxjs';
 import { Job } from '../../interfaces/data';
 import { JobService } from '../../services/job.service';
 import { JobDescriptionService } from '../../services/job-description.service';
+import { ToastrService } from 'ngx-toastr';
 
 type FilterCriteria = {
   title: string;
@@ -17,22 +18,46 @@ type PaginationState = {
   currentPage: number;
   itemsPerPage: number;
   totalItems: number;
+  totalPages: number;
+};
+
+type ApplicationFormState = {
+  name: string;
+  email: string;
+  phone: string;
+  country: string;
+  education: string;
+  currentPosition: string;
+  currentCompany: string;
+  cvFile: File | null;
+  coverLetter: string;
 };
 
 type JobState = {
-  jobs: Job[];
-  filteredJobs: Job[];
+  jobs: Job[]; 
+  allJobs: Job[]; 
+  filteredJobs: Job[]; 
+  paginatedFilteredJobs: Job[]; 
   isLoading: boolean;
+  isFiltering: boolean; 
   filters: FilterCriteria;
   pagination: PaginationState;
+  originalPagination: PaginationState; 
   selectedJob: Job | null;
   isModalOpen: boolean;
+  isInApplyMode: boolean;
+  applicationForm: ApplicationFormState;
+  applicationSubmitted: boolean;
+  applicationErrors: Record<string, string>;
 };
 
 const initialState: JobState = {
   jobs: [],
+  allJobs: [],
   filteredJobs: [],
+  paginatedFilteredJobs: [],
   isLoading: false,
+  isFiltering: false,
   filters: {
     title: '',
     location: '',
@@ -41,54 +66,109 @@ const initialState: JobState = {
   },
   pagination: {
     currentPage: 1,
-    itemsPerPage: 4,
+    itemsPerPage: 11,
     totalItems: 0,
+    totalPages: 0
+  },
+  originalPagination: {
+    currentPage: 1,
+    itemsPerPage: 11,
+    totalItems: 0,
+    totalPages: 0
   },
   selectedJob: null,
-  isModalOpen: false
+  isModalOpen: false,
+  isInApplyMode: false,
+  applicationForm: {
+    name: '',
+    email: '',
+    phone: '',
+    country: '',
+    education: '',
+    currentPosition: '',
+    currentCompany: '',
+    cvFile: null,
+    coverLetter: ''
+  },
+  applicationSubmitted: false,
+  applicationErrors: {}
 };
 
 export const JobStore = signalStore(
   { providedIn: 'root' },
   withState(initialState),
-  withComputed(({ filteredJobs, pagination }) => ({
-    totalPages: computed(() => Math.ceil(filteredJobs().length / pagination().itemsPerPage)),
-    paginatedJobs: computed(() => {
-      const start = (pagination().currentPage - 1) * pagination().itemsPerPage;
-      return filteredJobs().slice(start, start + pagination().itemsPerPage);
-    }),
+  withComputed(({ filteredJobs, paginatedFilteredJobs, pagination, isFiltering, jobs }) => ({
+    displayJobs: computed(() => isFiltering() ? paginatedFilteredJobs() : jobs()),
     showingStart: computed(() => (pagination().currentPage - 1) * pagination().itemsPerPage + 1),
     showingEnd: computed(() => Math.min(
-      pagination().currentPage * pagination().itemsPerPage, 
-      filteredJobs().length
+      pagination().currentPage * pagination().itemsPerPage,
+      pagination().totalItems
     ))
   })),
-  withMethods((store, jobService = inject(JobService), descService = inject(JobDescriptionService)) => {
+  withMethods((store, jobService = inject(JobService), descService = inject(JobDescriptionService), toastr = inject(ToastrService)) => {
     const methods = {
-      loadJobs: rxMethod<void>(
+      loadJobs: rxMethod<{ page?: number, perPage?: number }>(
         pipe(
           tap(() => patchState(store, { isLoading: true })),
-          switchMap(() => jobService.getJobs().pipe(
-            tap((res) => {
-              const jobs = res.data.map((job: { description: any; title: string; }) => ({
-                ...job,
-                description: job.description || descService.getDefaultDescription(job.title),
-              }));
-              patchState(store, { 
-                jobs, 
-                filteredJobs: jobs, 
-                isLoading: false, 
-                pagination: { 
-                  ...store.pagination(), 
-                  totalItems: jobs.length 
-                } 
-              });
-            }),
-            catchError(() => {
-              patchState(store, { isLoading: false });
-              return of([]);
-            }),
-          ))
+          switchMap(({ page = store.pagination().currentPage, perPage = store.pagination().itemsPerPage }) => 
+            jobService.getJobs(page, perPage).pipe(
+              tap((response) => {
+                const jobs = response.data.map((job: any) => ({
+                  ...job,
+                  description: job.description || descService.getDefaultDescription(job.title),
+                }));
+                
+                patchState(store, { 
+                  jobs, 
+                  isLoading: false,
+                  pagination: {
+                    ...store.pagination(),
+                    currentPage: response.meta.current_page,
+                    itemsPerPage: response.meta.per_page,
+                    totalItems: response.meta.total,
+                    totalPages: response.meta.last_page
+                  },
+                  originalPagination: {
+                    currentPage: response.meta.current_page,
+                    itemsPerPage: response.meta.per_page,
+                    totalItems: response.meta.total,
+                    totalPages: response.meta.last_page
+                  }
+                });
+              }),
+              catchError(() => {
+                patchState(store, { isLoading: false });
+                return of([]);
+              })
+            )
+          )
+        )
+      ),
+
+      loadAllJobs: rxMethod<void>(
+        pipe(
+          tap(() => patchState(store, { isLoading: true })),
+          switchMap(() => 
+            jobService.getAllJobs().pipe(
+              tap((response) => {
+                const allJobs = response.data.map((job: any) => ({
+                  ...job,
+                  description: job.description || descService.getDefaultDescription(job.title),
+                }));
+                
+                patchState(store, { 
+                  allJobs,
+                  isLoading: false
+                });
+                
+                methods.applyFilters();
+              }),
+              catchError(() => {
+                patchState(store, { isLoading: false });
+                return of([]);
+              })
+            )
+          )
         )
       ),
 
@@ -96,68 +176,244 @@ export const JobStore = signalStore(
         const newFilters = { ...store.filters(), ...updates };
         patchState(store, { filters: newFilters });
 
-        const filtered = store.jobs().filter(job => {
-          const matchesTitle = newFilters.title ? 
-            job.title.toLowerCase().includes(newFilters.title.toLowerCase()) : true;
-          const matchesLocation = newFilters.location ? 
-            job.page.location.country_and_city?.toLowerCase().includes(newFilters.location.toLowerCase()) : true;
-          const matchesExperience = newFilters.experienceLevel ? 
-            getExperienceLevel(job.minimum_years_of_experience) === newFilters.experienceLevel : true;
-          const matchesCompany = newFilters.company ? 
-            job.page.alias.split(' ')[0].toLowerCase().includes(newFilters.company.toLowerCase()) : true;
+        const isFiltering = Object.values(newFilters).some(val => val !== '');
+
+        if (isFiltering && store.allJobs().length === 0) {
+          patchState(store, { isFiltering: true });
+          methods.loadAllJobs();
+        } else if (isFiltering) {
+          patchState(store, { isFiltering: true });
+          methods.applyFilters();
+        } else {
+          patchState(store, { 
+            isFiltering: false,
+            filteredJobs: [],
+            paginatedFilteredJobs: [],
+            filters: initialState.filters,
+            pagination: store.originalPagination()
+          });
+          methods.loadJobs({ page: 1 });
+        }
+      },
+
+      applyFilters: () => {
+        const filters = store.filters();
+        const allJobs = store.allJobs();
+        
+        if (allJobs.length === 0) return;
+
+        const filtered = allJobs.filter(job => {
+          const matchesTitle = filters.title ? 
+            job.title.toLowerCase().includes(filters.title.toLowerCase()) : true;
+          
+          const matchesLocation = filters.location ? 
+            (job.page?.location?.country_and_city?.toLowerCase().includes(filters.location.toLowerCase()) ?? false) : true;
+          
+          const matchesExperience = filters.experienceLevel ? 
+            getExperienceLevel(job.minimum_years_of_experience) === filters.experienceLevel : true;
+          
+          const matchesCompany = filters.company ? 
+            (job.page?.alias?.toLowerCase().includes(filters.company.toLowerCase()) ?? false) : true;
 
           return matchesTitle && matchesLocation && matchesExperience && matchesCompany;
         });
 
+        const totalFilteredItems = filtered.length;
+        const totalFilteredPages = Math.ceil(totalFilteredItems / store.pagination().itemsPerPage);
+        
         patchState(store, { 
           filteredJobs: filtered,
           pagination: { 
             ...store.pagination(), 
-            currentPage: 1, 
-            totalItems: filtered.length 
+            currentPage: 1,
+            totalItems: totalFilteredItems,
+            totalPages: totalFilteredPages
           },
+        });
+
+        methods.paginateFilteredJobs();
+      },
+
+      paginateFilteredJobs: () => {
+        const { currentPage, itemsPerPage } = store.pagination();
+        const filtered = store.filteredJobs();
+        
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        const paginatedJobs = filtered.slice(startIndex, endIndex);
+        
+        patchState(store, { 
+          paginatedFilteredJobs: paginatedJobs 
         });
       },
 
       setPage: (page: number) => {
+        const validatedPage = Math.max(1, Math.min(page, store.pagination().totalPages));
+        
+        if (validatedPage !== store.pagination().currentPage) {
+          patchState(store, {
+            pagination: {
+              ...store.pagination(),
+              currentPage: validatedPage
+            }
+          });
+
+          if (store.isFiltering()) {
+            methods.paginateFilteredJobs();
+          } else {
+            patchState(store, { isLoading: true });
+            methods.loadJobs({ page: validatedPage });
+          }
+        }
+      },
+
+      onPageInputChange: rxMethod<Event>(
+        pipe(
+          debounceTime(500),
+          distinctUntilChanged(),
+          tap((event) => {
+            const input = event.target as HTMLInputElement;
+            const page = parseInt(input.value);
+            if (!isNaN(page)) {
+              methods.setPage(page);
+            }
+          })
+        )
+      ),
+
+      openJobDetails: (job: Job) => {
+        patchState(store, {
+          selectedJob: job,
+          isModalOpen: true,
+          isInApplyMode: false, // Start in view mode
+          applicationSubmitted: false
+        });
+      },
+
+      startApplication: () => {
         patchState(store, { 
-          pagination: { 
-            ...store.pagination(), 
-            currentPage: page 
-          } 
+          isInApplyMode: true,
+          applicationForm: initialState.applicationForm,
+          applicationErrors: {}
+        });
+      },
+
+      cancelApplication: () => {
+        patchState(store, { 
+          isInApplyMode: false 
         });
       },
 
       openJobModal: (job: Job) => {
         patchState(store, {
           selectedJob: job,
-          isModalOpen: true
+          isModalOpen: true,
+          isInApplyMode: false,
+          applicationSubmitted: false,
+          applicationForm: initialState.applicationForm,
+          applicationErrors: {}
         });
       },
 
       closeJobModal: () => {
         patchState(store, {
           selectedJob: null,
-          isModalOpen: false
+          isModalOpen: false,
+          isInApplyMode: false
         });
       },
 
-      applyToJob: () => {
-        const job = store.selectedJob();
-        if (job) {
-          // Implement actual application logic here
-          console.log('Applying to job:', job.id);
-          methods.closeJobModal();
-        }
+      updateApplicationForm: (update: Partial<ApplicationFormState>) => {
+        patchState(store, {
+          applicationForm: { ...store.applicationForm(), ...update }
+        });
       },
 
-      saveJob: () => {
-        const job = store.selectedJob();
-        if (job) {
-          // Implement actual save logic here
-          console.log('Saving job:', job.id);
-          methods.closeJobModal();
+      validateApplication: () => {
+        const form = store.applicationForm();
+        const errors: Record<string, string> = {};
+        
+        // Access properties safely with type checking
+        if (!form['name']) errors['name'] = 'Name is required';
+        
+        if (!form['email']) {
+          errors['email'] = 'Email is required';
+        } else if (typeof form['email'] === 'string' && !/^\S+@\S+\.\S+$/.test(form['email'])) {
+          errors['email'] = 'Invalid email format';
         }
+        
+        if (!form['phone']) errors['phone'] = 'Phone is required';
+        if (!form['country']) errors['country'] = 'Country is required';
+        if (!form['education']) errors['education'] = 'Education is required';
+        if (!form['currentPosition']) errors['currentPosition'] = 'Current position is required';
+        if (!form['currentCompany']) errors['currentCompany'] = 'Current company is required';
+        
+        const cvFile = form['cvFile'];
+        if (!cvFile) {
+          errors['cvFile'] = 'CV is required';
+        } else if (cvFile instanceof File && cvFile.size > 3 * 1024 * 1024) {
+          errors['cvFile'] = 'File size must be less than 3MB';
+        }
+
+        patchState(store, { applicationErrors: errors });
+        return Object.keys(errors).length === 0;
+      },
+
+      submitApplication: rxMethod<void>(
+        pipe(
+          tap(() => {
+            if (!methods.validateApplication()) {
+              toastr.error('Please fix the errors in the form');
+              return;
+            }
+
+            patchState(store, { isLoading: true });
+            
+            const form = store.applicationForm();
+            const jobId = store.selectedJob()?.id;
+            
+            if (!jobId) {
+              toastr.error('No job selected');
+              return;
+            }
+
+            const formData = new FormData();
+            Object.entries(form).forEach(([key, value]) => {
+              if (value !== null && value !== undefined) {
+                formData.append(key, value);
+              }
+            });
+
+            // Here you would call your actual API
+            console.log('Submitting application for job:', jobId, formData);
+            
+            // Simulate API call
+            return of({ success: true }).pipe(
+              tap(() => {
+                toastr.success('Application submitted successfully!');
+                patchState(store, { 
+                  isLoading: false,
+                  applicationSubmitted: true,
+                  isInApplyMode: false
+                });
+              }),
+              catchError((error) => {
+                toastr.error('Failed to submit application');
+                patchState(store, { isLoading: false });
+                return of(error);
+              })
+            );
+          })
+        )
+      ),
+
+      resetApplication: () => {
+        patchState(store, {
+          applicationSubmitted: false,
+          applicationForm: initialState.applicationForm,
+          applicationErrors: {},
+          isInApplyMode: false
+        });
       },
 
       getExperienceLevelDisplayText: (years: number): string => {
@@ -165,6 +421,11 @@ export const JobStore = signalStore(
         if (years === 1) return 'Mid Level';
         if (years === 2 || years === 3) return 'Senior Level';
         return 'Executive';
+      },
+
+      resetStore: () => {
+        patchState(store, initialState);
+        methods.loadJobs({ page: 1 });
       }
     };
 

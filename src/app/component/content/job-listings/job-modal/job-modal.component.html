@@ -1,49 +1,81 @@
-<div class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" *ngIf="store.isModalOpen()">
-  <div class="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-    <div class="p-6">
-      <div class="flex justify-between items-start mb-4">
-        <h2 class="text-2xl font-bold">{{ store.selectedJob()?.title || 'No title available' }}</h2>
-        <button (click)="store.closeJobModal()" class="text-gray-500 hover:text-gray-700">
-          <i class="fas fa-times"></i>
-        </button>
-      </div>
-      
-      <div class="space-y-4">
-        <div>
-          <h3 class="text-lg font-semibold">Experience</h3>
-          <p>{{ getExperienceText(store.selectedJob()?.minimum_years_of_experience) }}</p>
+@if (jobStore.isModalOpen()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 transition-opacity duration-300">
+    <div class="absolute inset-0" (click)="jobStore.closeJobModal()"></div>
+    <div class="relative bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200 transform transition-all duration-300 scale-100" (click)="$event.stopPropagation()">
+      <div class="p-6">
+        <div class="flex justify-between items-start mb-4">
+          <h2 class="text-2xl font-bold">{{ jobStore.selectedJob()?.title || 'No title available' }}</h2>
+          <button (click)="jobStore.closeJobModal()" class="text-gray-500 hover:text-gray-700 transition-colors">
+            <i class="fas fa-times text-xl"></i>
+          </button>
         </div>
         
-        <div>
-          <h3 class="text-lg font-semibold">Company</h3>
-          <p>{{ store.selectedJob()?.page?.alias || 'company not specified' }}</p>
-        </div>
-        
-        <div>
-          <h3 class="text-lg font-semibold">Location</h3>
-          <p>{{ store.selectedJob()?.page?.location?.country_and_city || 'Location not specified' }}</p>
-        </div>
-        
-        <div>
-          <h3 class="text-lg font-semibold">Description</h3>
-          <p class="whitespace-pre-line">{{ store.selectedJob()?.description || 'No description available' }}</p>
-        </div>
-      </div>
+        @if (jobStore.isInApplyMode()) {
+          <!-- Only show the application form without job details -->
+          <app-job-application-form></app-job-application-form>
+        }
+        @else if (jobStore.applicationSubmitted()) {
+          <div class="text-center py-8">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
+              <svg class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h3 class="mt-3 text-lg font-medium text-gray-900">Application Submitted!</h3>
+            <p class="mt-2 text-sm text-gray-500">
+              Thank you for applying to {{ jobStore.selectedJob()?.title || 'this position' }} 
+              at {{ (jobStore.selectedJob()?.page?.alias ||'The Company Name Is Not Appear') }}.
+            </p>
+            <div class="mt-6">
+              <button 
+                (click)="jobStore.closeJobModal()"
+                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        }
+        @else {
+          <!-- Show job details when not in apply mode -->
+          <div class="space-y-4">
+            <div>
+              <h3 class="text-lg font-semibold">Experience</h3>
+              <p>{{ jobStore.getExperienceLevelDisplayText(jobStore.selectedJob()?.minimum_years_of_experience || 0) }}</p>
+            </div>
+            
+            <div>
+              <h3 class="text-lg font-semibold">Company</h3>
+              <p>{{ jobStore.selectedJob()?.page?.alias || 'Company not specified' }}</p>
+            </div>
+            
+            <div>
+              <h3 class="text-lg font-semibold">Location</h3>
+              <p>{{ jobStore.selectedJob()?.page?.location?.country_and_city || 'Location not specified' }}</p>
+            </div>
+            
+            <div>
+              <h3 class="text-lg font-semibold">Description</h3>
+              <p class="whitespace-pre-line">{{ jobStore.selectedJob()?.description || 'No description available' }}</p>
+            </div>
+          </div>
 
-      <div class="flex gap-4 mt-6">
-        <button 
-          (click)="store.applyToJob()"
-          class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
-        >
-          Apply Now
-        </button>
-        <button 
-          (click)="store.saveJob()"
-          class="border border-gray-300 hover:bg-gray-100 px-4 py-2 rounded-md"
-        >
-          Save Job
-        </button>
+          <div class="flex gap-4 mt-6">
+            <button 
+              (click)="jobStore.startApplication()"
+              class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors"
+            >
+              Apply Now
+            </button>
+            <button 
+              (click)="jobStore.closeJobModal()"
+              class="border border-gray-300 hover:bg-gray-100 text-gray-700 px-4 py-2 rounded-md transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        }
       </div>
     </div>
   </div>
-</div>
+}

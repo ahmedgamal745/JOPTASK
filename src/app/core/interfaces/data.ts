@@ -189,21 +189,4 @@ export interface Application {
   created_at: string;
   updated_at: string;
 }
-export type JobData =
-  | Job
-  | Apply
-  | Coordinates
-  | Location
-  | Country
-  | Language
-  | WorkSpaceMetaData
-  | City
-  | CityWorkSpaceMetaData
-  | GeoLocation
-  | Industry
-  | Page
-  | PageWorkSpaceMetaData
-  | Information
-  | Application;
 
-export const allData: JobData[] = [];

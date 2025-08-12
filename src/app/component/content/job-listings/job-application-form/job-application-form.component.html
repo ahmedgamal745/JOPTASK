@@ -1,0 +1,126 @@
+<form [formGroup]="applicationForm" (ngSubmit)="onSubmit()" class="space-y-4">
+     <!-- Job Title Header -->
+  <div class="border-b pb-4 mb-4">
+    <h2 class="text-xl font-bold text-gray-800">Applying to: {{ jobStore.selectedJob()?.title || 'Job Title' }}</h2>
+  </div>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <!-- Personal Information -->
+    <div class="space-y-4">
+      <h3 class="text-lg font-semibold text-gray-800">Personal Information</h3>
+      
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Full Name*</label>
+        <input type="text" formControlName="name" class="w-full px-3 py-2 border rounded-md">
+        @if (isFieldInvalid('name')) {
+          <p class="text-red-500 text-sm mt-1">{{ getErrorMessage('name') }}</p>
+        }
+      </div>
+      
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Email*</label>
+        <input type="email" formControlName="email" class="w-full px-3 py-2 border rounded-md">
+        @if (isFieldInvalid('email')) {
+          <p class="text-red-500 text-sm mt-1">{{ getErrorMessage('email') }}</p>
+        }
+      </div>
+      
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Phone*</label>
+        <input type="tel" formControlName="phone" class="w-full px-3 py-2 border rounded-md">
+        @if (isFieldInvalid('phone')) {
+          <p class="text-red-500 text-sm mt-1">{{ getErrorMessage('phone') }}</p>
+        }
+      </div>
+      
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Country*</label>
+        <input type="text" formControlName="country" class="w-full px-3 py-2 border rounded-md">
+        @if (isFieldInvalid('country')) {
+          <p class="text-red-500 text-sm mt-1">{{ getErrorMessage('country') }}</p>
+        }
+      </div>
+    </div>
+    
+    <!-- Professional Information -->
+    <div class="space-y-4">
+      <h3 class="text-lg font-semibold text-gray-800">Professional Information</h3>
+      
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Education*</label>
+        <input type="text" formControlName="education" class="w-full px-3 py-2 border rounded-md">
+        @if (isFieldInvalid('education')) {
+          <p class="text-red-500 text-sm mt-1">{{ getErrorMessage('education') }}</p>
+        }
+      </div>
+      
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Current Position*</label>
+        <input type="text" formControlName="currentPosition" class="w-full px-3 py-2 border rounded-md">
+        @if (isFieldInvalid('currentPosition')) {
+          <p class="text-red-500 text-sm mt-1">{{ getErrorMessage('currentPosition') }}</p>
+        }
+      </div>
+      
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Current Company*</label>
+        <input type="text" formControlName="currentCompany" class="w-full px-3 py-2 border rounded-md">
+        @if (isFieldInvalid('currentCompany')) {
+          <p class="text-red-500 text-sm mt-1">{{ getErrorMessage('currentCompany') }}</p>
+        }
+      </div>
+    </div>
+  </div>
+  
+  <!-- Documents -->
+  <div class="space-y-4">
+    <h3 class="text-lg font-semibold text-gray-800">Documents</h3>
+    
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Upload CV (Max 3MB)*</label>
+      <input 
+        type="file" 
+        (change)="onFileSelected($event)" 
+        accept=".pdf,.doc,.docx" 
+        class="w-full px-3 py-2 border rounded-md"
+      >
+      @if (isFieldInvalid('cvFile')) {
+        <p class="text-red-500 text-sm mt-1">{{ getErrorMessage('cvFile') }}</p>
+      }
+      @if (applicationForm.get('cvFile')?.value) {
+        <p class="text-sm text-gray-500 mt-1">Selected: {{ applicationForm.get('cvFile')?.value?.name }}</p>
+      }
+    </div>
+    
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Cover Letter</label>
+      <textarea 
+        formControlName="coverLetter" 
+        class="w-full px-3 py-2 border rounded-md" 
+        rows="4"
+      ></textarea>
+    </div>
+  </div>
+  
+  <div class="flex gap-4 mt-6">
+    <button 
+      type="submit"
+      [disabled]="applicationForm.invalid || isSubmitting"
+      class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors flex items-center disabled:opacity-50"
+    >
+      @if (isSubmitting) {
+        <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      }
+      Submit Application
+    </button>
+    <button 
+      type="button"
+      (click)="jobStore.cancelApplication()"
+      class="border border-gray-300 hover:bg-gray-100 text-gray-700 px-4 py-2 rounded-md transition-colors flex items-center"
+    >
+      Cancel
+    </button>
+  </div>
+</form>

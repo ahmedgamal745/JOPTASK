@@ -4,10 +4,11 @@ import { FiltersComponent } from "../../content/filters/filters.component";
 import { JobListingsComponent } from "../../content/job-listings/job-listings.component";
 import { JobStore } from '../../../core/stores/job/job.store';
 import { FirstWordPipe } from "../../../shared/pipes/first-word-pipe.pipe";
+import { JobModalComponent } from '../../content/job-listings/job-modal/job-modal.component';
 @Component({
   selector: 'app-main',
   standalone: true,
-  imports: [HeaderComponent, FiltersComponent, JobListingsComponent, FirstWordPipe],
+  imports: [HeaderComponent, FiltersComponent, JobListingsComponent,JobModalComponent],
   templateUrl: './main.component.html',
   styleUrl: './main.component.css'
 })
@@ -15,6 +16,7 @@ export class MainComponent {
 jobStore = inject(JobStore);
 
   ngOnInit() {
-    this.jobStore.loadJobs();
+    this.jobStore.loadJobs({ page: 1 });
   }
+  
 }

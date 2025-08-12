@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { constantApi } from '../constant/constantApi';
@@ -7,11 +7,25 @@ import { constantApi } from '../constant/constantApi';
   providedIn: 'root'
 })
 export class JobService {
+  constructor(private http: HttpClient) { }
 
-  constructor(private http:HttpClient) { }
+  getJobs(page: number, perPage: number = 11): Observable<any> {
+    const params = new HttpParams()
+      .set('pagination_type', 'paginate')
+      .set('per_page', perPage.toString())
+      .set('page', page.toString());
+
+    return this.http.get(constantApi, { params });
+  }
 
 
-  getJobs():Observable<any>{
-    return this.http.get(`${constantApi}`)
+  // New method to get all jobs for filtering
+  getAllJobs(): Observable<any> {
+  const params = new HttpParams()
+      .set('pagination_type', 'paginate')
+      .set('per_page', '1000') // Get all jobs
+      .set('page', '1');
+
+    return this.http.get(constantApi, { params });
   }
 }
