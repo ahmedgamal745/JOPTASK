@@ -1,7 +1,7 @@
 import { signalStore, withState, withMethods, patchState, withComputed } from '@ngrx/signals';
 import { computed, inject } from '@angular/core';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
-import { pipe, switchMap, tap, catchError, of, debounceTime, distinctUntilChanged } from 'rxjs';
+import { pipe, switchMap, tap, catchError, of, debounceTime, distinctUntilChanged, throwError } from 'rxjs';
 import { Job } from '../../interfaces/data';
 import { JobService } from '../../services/job.service';
 import { JobDescriptionService } from '../../services/job-description.service';
@@ -33,6 +33,14 @@ type ApplicationFormState = {
   coverLetter: string;
 };
 
+type SavedApplication = {
+  [key: string]: any;
+  jobTitle: string;
+  company: string;
+  appliedDate: string;
+  applicationId: string;
+};
+
 type JobState = {
   jobs: Job[]; 
   allJobs: Job[]; 
@@ -49,6 +57,7 @@ type JobState = {
   applicationForm: ApplicationFormState;
   applicationSubmitted: boolean;
   applicationErrors: Record<string, string>;
+  savedApplications: SavedApplication[];
 };
 
 const initialState: JobState = {
@@ -91,19 +100,21 @@ const initialState: JobState = {
     coverLetter: ''
   },
   applicationSubmitted: false,
-  applicationErrors: {}
+  applicationErrors: {},
+  savedApplications: []
 };
 
 export const JobStore = signalStore(
   { providedIn: 'root' },
   withState(initialState),
-  withComputed(({ filteredJobs, paginatedFilteredJobs, pagination, isFiltering, jobs }) => ({
+  withComputed(({ filteredJobs, paginatedFilteredJobs, pagination, isFiltering, jobs, savedApplications }) => ({
     displayJobs: computed(() => isFiltering() ? paginatedFilteredJobs() : jobs()),
     showingStart: computed(() => (pagination().currentPage - 1) * pagination().itemsPerPage + 1),
     showingEnd: computed(() => Math.min(
       pagination().currentPage * pagination().itemsPerPage,
       pagination().totalItems
-    ))
+    )),
+    applicationsCount: computed(() => savedApplications().length)
   })),
   withMethods((store, jobService = inject(JobService), descService = inject(JobDescriptionService), toastr = inject(ToastrService)) => {
     const methods = {
@@ -285,7 +296,7 @@ export const JobStore = signalStore(
         patchState(store, {
           selectedJob: job,
           isModalOpen: true,
-          isInApplyMode: false, // Start in view mode
+          isInApplyMode: false,
           applicationSubmitted: false
         });
       },
@@ -333,25 +344,20 @@ export const JobStore = signalStore(
         const form = store.applicationForm();
         const errors: Record<string, string> = {};
         
-        // Access properties safely with type checking
-        if (!form['name']) errors['name'] = 'Name is required';
-        
-        if (!form['email']) {
+        if (!form.name) errors['name'] = 'Name is required';
+        if (!form.email) {
           errors['email'] = 'Email is required';
-        } else if (typeof form['email'] === 'string' && !/^\S+@\S+\.\S+$/.test(form['email'])) {
+        } else if (!/^\S+@\S+\.\S+$/.test(form.email)) {
           errors['email'] = 'Invalid email format';
         }
-        
-        if (!form['phone']) errors['phone'] = 'Phone is required';
-        if (!form['country']) errors['country'] = 'Country is required';
-        if (!form['education']) errors['education'] = 'Education is required';
-        if (!form['currentPosition']) errors['currentPosition'] = 'Current position is required';
-        if (!form['currentCompany']) errors['currentCompany'] = 'Current company is required';
-        
-        const cvFile = form['cvFile'];
-        if (!cvFile) {
+        if (!form.phone) errors['phone'] = 'Phone is required';
+        if (!form.country) errors['country'] = 'Country is required';
+        if (!form.education) errors['education'] = 'Education is required';
+        if (!form.currentPosition) errors['currentPosition'] = 'Current position is required';
+        if (!form.currentCompany) errors['currentCompany'] = 'Current company is required';
+        if (!form.cvFile) {
           errors['cvFile'] = 'CV is required';
-        } else if (cvFile instanceof File && cvFile.size > 3 * 1024 * 1024) {
+        } else if (form.cvFile.size > 3 * 1024 * 1024) {
           errors['cvFile'] = 'File size must be less than 3MB';
         }
 
@@ -359,61 +365,84 @@ export const JobStore = signalStore(
         return Object.keys(errors).length === 0;
       },
 
-      submitApplication: rxMethod<void>(
-        pipe(
-          tap(() => {
-            if (!methods.validateApplication()) {
-              toastr.error('Please fix the errors in the form');
-              return;
+      submitJobApplication: (formData: FormData) => {
+        patchState(store, { isLoading: true });
+        
+        try {
+          const applicationData: Record<string, any> = {};
+          formData.forEach((value, key) => {
+            if (value instanceof File) {
+              applicationData[key] = {
+                name: value.name,
+                type: value.type,
+                size: value.size
+              };
+            } else {
+              applicationData[key] = value;
             }
+          });
 
-            patchState(store, { isLoading: true });
-            
-            const form = store.applicationForm();
-            const jobId = store.selectedJob()?.id;
-            
-            if (!jobId) {
-              toastr.error('No job selected');
-              return;
-            }
+          const selectedJob = store.selectedJob();
+          if (!selectedJob) {
+            throw new Error('No job selected');
+          }
 
-            const formData = new FormData();
-            Object.entries(form).forEach(([key, value]) => {
-              if (value !== null && value !== undefined) {
-                formData.append(key, value);
-              }
-            });
+          const existingApps = JSON.parse(localStorage.getItem('jobApplications') || '[]');
+          const newApplication: SavedApplication = {
+            ...applicationData,
+            jobTitle: selectedJob.title,
+            company: selectedJob.page?.alias || 'Unknown Company',
+            appliedDate: new Date().toISOString(),
+            applicationId: Date.now().toString()
+          };
 
-            // Here you would call your actual API
-            console.log('Submitting application for job:', jobId, formData);
-            
-            // Simulate API call
-            return of({ success: true }).pipe(
-              tap(() => {
-                toastr.success('Application submitted successfully!');
-                patchState(store, { 
-                  isLoading: false,
-                  applicationSubmitted: true,
-                  isInApplyMode: false
-                });
-              }),
-              catchError((error) => {
-                toastr.error('Failed to submit application');
-                patchState(store, { isLoading: false });
-                return of(error);
-              })
-            );
-          })
-        )
-      ),
+          const updatedApps = [...existingApps, newApplication];
+          localStorage.setItem('jobApplications', JSON.stringify(updatedApps));
 
-      resetApplication: () => {
-        patchState(store, {
-          applicationSubmitted: false,
-          applicationForm: initialState.applicationForm,
-          applicationErrors: {},
-          isInApplyMode: false
-        });
+          patchState(store, {
+            isLoading: false,
+            applicationSubmitted: true,
+            isInApplyMode: false,
+            savedApplications: updatedApps
+          });
+
+          toastr.success('Application submitted successfully!');
+          return of(true);
+        } catch (error) {
+          console.error('Error saving application:', error);
+          toastr.error('Failed to submit application');
+          patchState(store, { isLoading: false });
+          return throwError(() => error);
+        }
+      },
+
+      getSavedApplications: () => {
+        try {
+          const apps = JSON.parse(localStorage.getItem('jobApplications') || '[]');
+          patchState(store, { savedApplications: apps });
+          return apps;
+        } catch (error) {
+          console.error('Error reading applications:', error);
+          return [];
+        }
+      },
+
+      getApplicationById: (id: string) => {
+        const apps = store.savedApplications();
+        return apps.find(app => app.applicationId === id);
+      },
+
+      clearSavedApplications: () => {
+        localStorage.removeItem('jobApplications');
+        patchState(store, { savedApplications: [] });
+        toastr.success('All applications cleared');
+      },
+
+      deleteApplication: (id: string) => {
+        const updatedApps = store.savedApplications().filter(app => app.applicationId !== id);
+        localStorage.setItem('jobApplications', JSON.stringify(updatedApps));
+        patchState(store, { savedApplications: updatedApps });
+        toastr.success('Application deleted');
       },
 
       getExperienceLevelDisplayText: (years: number): string => {
@@ -428,6 +457,7 @@ export const JobStore = signalStore(
         methods.loadJobs({ page: 1 });
       }
     };
+    methods.getSavedApplications();
 
     return methods;
   })

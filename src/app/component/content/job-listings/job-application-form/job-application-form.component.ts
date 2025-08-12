@@ -13,9 +13,8 @@ export class JobApplicationFormComponent {
   private fb = inject(FormBuilder);
   private toastr = inject(ToastrService);
   jobStore = inject(JobStore);
-
   applicationForm: FormGroup;
-  maxFileSize = 3 * 1024 * 1024; // 3MB in bytes
+  maxFileSize = 3 * 1024 * 1024; 
   isSubmitting = false;
 
   constructor() {
@@ -47,7 +46,6 @@ export class JobApplicationFormComponent {
   }
 
   onSubmit() {
-  // Mark all fields as touched to show validation errors
   this.applicationForm.markAllAsTouched();
 
   if (this.applicationForm.invalid) {
@@ -56,46 +54,51 @@ export class JobApplicationFormComponent {
   }
 
   if (this.isSubmitting) {
-    return; // Prevent multiple submissions
+    return;
   }
 
   this.isSubmitting = true;
   
+
   const formData = new FormData();
-  Object.keys(this.applicationForm.controls).forEach(key => {
-    const control = this.applicationForm.get(key);
-    if (control?.value !== null && control?.value !== undefined) {
-      formData.append(key, control.value);
+  formData.append('name', this.applicationForm.get('name')?.value);
+  formData.append('email', this.applicationForm.get('email')?.value);
+  formData.append('phone', this.applicationForm.get('phone')?.value);
+  formData.append('country', this.applicationForm.get('country')?.value);
+  formData.append('education', this.applicationForm.get('education')?.value);
+  formData.append('currentPosition', this.applicationForm.get('currentPosition')?.value);
+  formData.append('currentCompany', this.applicationForm.get('currentCompany')?.value);
+  
+  
+  const cvFile = this.applicationForm.get('cvFile')?.value;
+  if (cvFile) {
+    formData.append('cvFile', cvFile);
+  }
+
+
+  const coverLetter = this.applicationForm.get('coverLetter')?.value;
+  if (coverLetter) {
+    formData.append('coverLetter', coverLetter);
+  }
+
+  this.jobStore.submitJobApplication(formData).subscribe({
+    next: () => {
+      this.isSubmitting = false;
+      this.applicationForm.reset();
+    },
+    error: () => {
+      this.isSubmitting = false;
     }
   });
-
-  // Here you would typically call your API service
-  console.log('Submitting application:', formData);
-  
-  // Simulate API call
-  setTimeout(() => {
-    this.isSubmitting = false;
-    
-    // Randomly determine success/failure for demo purposes
-    const isSuccess = Math.random() > 0.3; // 70% chance of success
-    
-    if (isSuccess) {
-      this.toastr.success('Application submitted successfully!');
-      this.jobStore.submitApplication();
-      this.applicationForm.reset();
-    } else {
-      this.toastr.error('Failed to submit application. Please try again.');
-    }
-  }, 1000);
 }
 
-  // Helper method to check if a field is invalid
+
   isFieldInvalid(field: string): boolean {
     const control = this.applicationForm.get(field);
     return !!control && control.invalid && (control.dirty || control.touched);
   }
 
-  // Helper method to get error message for a field
+  
   getErrorMessage(field: string): string {
     const control = this.applicationForm.get(field);
     if (!control || !control.errors) return '';

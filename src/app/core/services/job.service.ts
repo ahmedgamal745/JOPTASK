@@ -18,12 +18,10 @@ export class JobService {
     return this.http.get(constantApi, { params });
   }
 
-
-  // New method to get all jobs for filtering
   getAllJobs(): Observable<any> {
   const params = new HttpParams()
       .set('pagination_type', 'paginate')
-      .set('per_page', '1000') // Get all jobs
+      .set('per_page', '1000')
       .set('page', '1');
 
     return this.http.get(constantApi, { params });

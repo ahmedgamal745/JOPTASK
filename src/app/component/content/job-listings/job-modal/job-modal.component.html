@@ -11,7 +11,7 @@
         </div>
         
         @if (jobStore.isInApplyMode()) {
-          <!-- Only show the application form without job details -->
+          
           <app-job-application-form></app-job-application-form>
         }
         @else if (jobStore.applicationSubmitted()) {
@@ -37,7 +37,7 @@
           </div>
         }
         @else {
-          <!-- Show job details when not in apply mode -->
+          
           <div class="space-y-4">
             <div>
               <h3 class="text-lg font-semibold">Experience</h3>

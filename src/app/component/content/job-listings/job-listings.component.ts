@@ -1,7 +1,7 @@
 import { Component, computed, EventEmitter, inject, input, Output } from '@angular/core';
 import { Job } from '../../../core/interfaces/data';
 import { CommonModule } from '@angular/common';
-import { FirstWordPipe } from '../../../shared/pipes/first-word-pipe.pipe';
+
 import { JobStore } from '../../../core/stores/job/job.store';
 
 @Component({
@@ -12,22 +12,22 @@ import { JobStore } from '../../../core/stores/job/job.store';
   styleUrl: './job-listings.component.css'
 })
 export class JobListingsComponent {
-  // Inputs - updated to use displayJobs from the store
+  
   jobs = input.required<Job[]>();
-  displayJobs = input.required<Job[]>(); // New input for jobs to display (filtered or regular)
+  displayJobs = input.required<Job[]>(); 
   isLoading = input.required<boolean>();
   currentPage = input.required<number>();
   itemsPerPage = input.required<number>();
   totalItems = input.required<number>();
-  isFiltering = input.required<boolean>(); // New input to know if we're filtering
+  isFiltering = input.required<boolean>(); 
 
-  // Output for pagination events
+
   @Output() pageChange = new EventEmitter<number>();
 
-  // Inject the JobStore for modal functionality
+  
   jobStore = inject(JobStore);
 
-  // Computed properties
+  
   totalPages = computed(() => Math.ceil(this.totalItems() / this.itemsPerPage()));
   paginatedJobs = computed(() => this.displayJobs()); // Use displayJobs instead of filteredJobs
   showingStart = computed(() => (this.currentPage() - 1) * this.itemsPerPage() + 1);
@@ -36,7 +36,7 @@ export class JobListingsComponent {
     this.totalItems()
   ));
 
-  // Generate page numbers for display
+ 
   pages = computed<(number | string)[]>(() => {
     const current = this.currentPage();
     const total = this.totalPages();
